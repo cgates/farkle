@@ -21,78 +21,115 @@ class Score(object):
     def __init__(self):
         self.can_reroll = True
         self.is_farkle = False
+        self.score = 0
 
     @property
     def is_match(self):
         return self.score != 0
 
+    def append_me(self, scores):
+        if self.score != 0:
+            scores.append(self)
 
 class SixOfAKind(Score):
-    def __init__(self, roll):
+    def __init__(self, dice):
         super(SixOfAKind, self).__init__()
-        self.claim, self.remainder = _claim_remainder(roll, [6])
+        self.claim, self.remainder = _claim_remainder(dice, [6])
         self.score = 3000 if self.claim else 0
 
 class FiveOfAKind(Score):
-    def __init__(self, roll):
+    def __init__(self, dice):
         super(FiveOfAKind, self).__init__()
-        self.claim, self.remainder = _claim_remainder(roll, [5])
+        self.claim, self.remainder = _claim_remainder(dice, [5])
         self.score = 2000 if self.claim else 0
 
 class FourOfAKind(Score):
-    def __init__(self, roll):
+    def __init__(self, dice):
         super(FourOfAKind, self).__init__()
-        self.claim, self.remainder = _claim_remainder(roll, [4])
+        self.claim, self.remainder = _claim_remainder(dice, [4])
         self.score = 1000 if self.claim else 0
 
 class ThreeOfAKind(Score):
     SCORES = {1:300, 2:200, 3:300, 4:400, 5:500, 6:600}
 
-    def __init__(self, roll):
+    def __init__(self, dice):
         super(ThreeOfAKind, self).__init__()
-        self.claim, self.remainder = _claim_remainder(roll, [3])
+        self.claim, self.remainder = _claim_remainder(dice, [3])
         if self.claim:
             self.score = ThreeOfAKind.SCORES[self.claim[0]]
         else:
             self.score= 0
 
 class TwoTriplets(Score):
-    def __init__(self, roll):
+    def __init__(self, dice):
         super(TwoTriplets, self).__init__()
-        self.claim, self.remainder = _claim_remainder(roll, [3,3])
+        self.claim, self.remainder = _claim_remainder(dice, [3,3])
         self.score = 2500 if self.claim else 0
 
 class FourAndTwo(Score):
-    def __init__(self, roll):
+    def __init__(self, dice):
         super(FourAndTwo, self).__init__()
-        self.claim, self.remainder = _claim_remainder(roll, [2, 4])
+        self.claim, self.remainder = _claim_remainder(dice, [2, 4])
         self.score = 1500 if self.claim else 0
 
 class ThreePair(Score):
-    def __init__(self, roll):
+    def __init__(self, dice):
         super(ThreePair, self).__init__()
-        self.claim, self.remainder = _claim_remainder(roll, [2,2,2])
+        self.claim, self.remainder = _claim_remainder(dice, [2,2,2])
         self.score = 1500 if self.claim else 0
 
 class Straight(Score):
-    def __init__(self, roll):
+    def __init__(self, dice):
         super(Straight, self).__init__()
-        self.claim, self.remainder = _claim_remainder(roll, [1,1,1,1,1,1])
+        self.claim, self.remainder = _claim_remainder(dice, [1,1,1,1,1,1])
         self.score = 1500 if self.claim else 0
 
+class One(Score):
+    def __init__(self, dice):
+        super(One, self).__init__()
+        (self.claim,
+         self.remainder,
+         self.score) = self._claim_remainder_score(dice)
+
+    @staticmethod
+    def _claim_remainder_score(dice):
+        remainder = list(dice)
+        for die in dice:
+            if die == 1:
+                remainder.remove(die)
+                return [die], remainder, 100
+        return [], dice, 0
+
+class Five(Score):
+    def __init__(self, dice):
+        super(Five, self).__init__()
+        (self.claim,
+         self.remainder,
+         self.score) = self._claim_remainder_score(dice)
+
+    @staticmethod
+    def _claim_remainder_score(dice):
+        remainder = list(dice)
+        for die in dice:
+            if die == 5:
+                remainder.remove(die)
+                return [die], remainder, 50
+        return [], dice, 0
+
+
 class OnesAndFives(Score):
-    def __init__(self, roll):
+    def __init__(self, dice):
         super(OnesAndFives, self).__init__()
         (self.claim,
          self.remainder,
-         self.score) = self._claim_remainder_score(roll)
+         self.score) = self._claim_remainder_score(dice)
 
     @staticmethod
-    def _claim_remainder_score(roll):
+    def _claim_remainder_score(dice):
         score = 0
         claim = []
         remainder = []
-        for die in roll:
+        for die in dice:
             if die == 1:
                 claim.append(die)
                 score += 100
@@ -104,13 +141,17 @@ class OnesAndFives(Score):
         return claim, remainder, score
 
 class Farkle(Score):
-    def __init__(self, roll):
+    def __init__(self, dice):
         super(Farkle, self).__init__()
         self.claim = []
         self.remainder = []
         self.score = 0
         self.is_farkle = True
         self.can_reroll = False
+
+    def append_me(self, scores):
+        if not scores:
+            scores.append(self)
 
 
 class Roll(object):
@@ -123,6 +164,8 @@ class Roll(object):
                      FourOfAKind,
                      ThreeOfAKind,
                      OnesAndFives,
+                     # One,
+                     # Five,
                      ]
 
     def __init__(self, dice):
@@ -133,22 +176,14 @@ class Roll(object):
         self.score = sum([x.score for x in self.partial_scores])
         self.is_farkle = self.partial_scores[-1].is_farkle
 
-    @staticmethod
-    def _get_partial_score(dice):
-        for score_class in Roll.SCORE_CLASSES:
-            partial_score = score_class(dice)
-            if partial_score.is_match:
-                return partial_score
-        return Farkle(dice)
-
     def _build_partial_scores(self, dice):
         partial_scores = []
-        partial_score = self._get_partial_score(dice)
-        partial_scores.append(partial_score)
-        while partial_score.score and partial_score.remainder:
-            partial_score = self._get_partial_score(partial_score.remainder)
-            if partial_score.score:
-                partial_scores.append(partial_score)
+        remaining_dice = dice
+        for score_class in Roll.SCORE_CLASSES:
+            partial_score = score_class(remaining_dice)
+            partial_score.append_me(partial_scores)
+            remaining_dice = partial_score.remainder
+        Farkle(dice).append_me(partial_scores)
         return partial_scores
 
     def dump_partial_scores(self, player_name):
@@ -230,11 +265,10 @@ class Game(object):
 
 
 def main():
-    player_a = Player('A')
-    player_b = Player('B')
-    player_c = Player('C')
+    player_a = Player('chris')
+    player_b = Player('jules')
 
-    game = Game([player_a, player_b, player_c])
+    game = Game([player_a, player_b])
     game.play()
 
 if __name__ == '__main__':
